@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRE Scraper Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <header>
+            <h1>LBKN Automator</h1>
+            <p>Configure parameters and start sourcing.</p>
+        </header>
+
+        <main>
+            <form id="scrape-form" class="glass-panel">
+                <div class="form-group">
+                    <label for="location">Location *</label>
+                    <input type="text" id="location" name="location" placeholder="e.g. Melbourne Region VIC" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="listing_type">Listing Type *</label>
+                        <select id="listing_type" name="listing_type" required>
+                            <option value="for-lease">For Lease</option>
+                            <option value="for-sale">For Sale</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="keyword">Property Type</label>
+                        <select id="keyword" name="keyword">
+                            <option value="">All Types</option>
+                            <option value="office">Offices</option>
+                            <option value="serviced-offices">Serviced Offices</option>
+                            <option value="retail">Shop & Retail</option>
+                            <option value="industrial">Factory, Warehouse & Industrial</option>
+                            <option value="land">Development / Land</option>
+                            <option value="medical">Medical / Consulting</option>
+                            <option value="parking">Parking / Car Space</option>
+                            <option value="rural">Rural / Farming</option>
+                            <option value="showrooms">Showrooms / Bulky Goods</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="min_size">Min Size (sqm)</label>
+                        <input type="number" id="min_size" name="min_size" placeholder="e.g. 210" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="max_pages">Max Pages</label>
+                        <input type="number" id="max_pages" name="max_pages" value="1" min="1" max="10">
+                    </div>
+                </div>
+
+                <button type="submit" id="start-btn">Start Sourcing</button>
+            </form>
+
+            <div id="status-panel" class="glass-panel hidden">
+                <div class="status-header">
+                    <h2>Scraping Status</h2>
+                    <span id="status-badge" class="badge">Waiting...</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+                <p id="status-text">Ready to start.</p>
+            </div>
+
+            <div id="results-panel" class="glass-panel hidden">
+                <h2>Results</h2>
+                <div class="table-container">
+                    <table id="results-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Address</th>
+                                <th>Price</th>
+                                <th>Size</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

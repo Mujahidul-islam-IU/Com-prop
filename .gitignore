@@ -1,0 +1,52 @@
+# ============================================================
+#  LBKN Property Pipeline — .gitignore
+# ============================================================
+
+# === SENSITIVE CREDENTIALS — NEVER COMMIT ===
+service_account.json        # Google Sheets service account key
+*.pem
+*.key
+*.p12
+
+# === PYTHON ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+env/
+venv/
+.venv/
+.env
+*.env
+
+# === OUTPUT / DATA FILES ===
+output/
+*.csv
+*.json
+config.py
+service_account.json
+
+# === CHROME DRIVER ARTIFACTS ===
+*.crdownload
+chromedriver*
+
+# === IDE / OS ===
+.vscode/
+.idea/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === LARGE STATIC FILES ===
+page.html
+
+# === LOGS ===
+*.log
