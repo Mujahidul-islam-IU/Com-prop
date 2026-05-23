@@ -184,6 +184,7 @@ def navigate_via_search_ui(driver, location: str, keyword: str, min_size: int, l
         human_delay(500, 1000)
         location_input.click()
         
+        from selenium.webdriver.common.keys import Keys
         # Type character by character
         for char in location:
             location_input.send_keys(char)
@@ -193,15 +194,13 @@ def navigate_via_search_ui(driver, location: str, keyword: str, min_size: int, l
         human_delay(2000, 3500)
         
         try:
-            # Look for <li> containing the text
-            suggestion = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, f"//li[contains(text(), '{location}')]"))
-            )
-            human_delay(300, 600)
-            suggestion.click()
-            print(f"  [UI]  Successfully clicked autocomplete suggestion for '{location}'")
-        except TimeoutException:
-            print(f"  [WARN]  Failed to find suggestion for '{location}'")
+            # Press DOWN arrow to highlight the first suggestion, then ENTER to select it.
+            location_input.send_keys(Keys.ARROW_DOWN)
+            human_delay(300, 500)
+            location_input.send_keys(Keys.ENTER)
+            print(f"  [UI]  Successfully selected first autocomplete suggestion via keyboard.")
+        except Exception as e:
+            print(f"  [WARN]  Failed keyboard autocomplete: {e}")
 
         human_delay(800, 1500)
 
@@ -283,7 +282,8 @@ def run_scraper(location: str, keyword: str, min_size: int, listing_type: str, m
             driver = uc.Chrome(
                 options=options,
                 user_data_dir=profile_dir,
-                use_subprocess=True
+                use_subprocess=True,
+                version_main=148
             )
             break
         except Exception as e:
@@ -397,8 +397,7 @@ def run_scraper(location: str, keyword: str, min_size: int, listing_type: str, m
                     print("  [WARN] EnquiryAgent module not found. Skipping Phase 2.")
                 else:
                     agent = EnquiryAgent()
-                    # TEST: Limit to 1 listing for end-to-end validation
-                    all_listings = all_listings[:1]
+                    # Processing all listings end-to-end
                     agent.process_listings(driver, all_listings)
                     
                     # Re-save the enriched data to CSV/JSON after details extraction

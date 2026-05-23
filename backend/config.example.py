@@ -22,8 +22,10 @@ OUTPUT_DIR = "./output"                 # Where to save JSON + CSV files
 # Get your Anthropic API key at: https://console.anthropic.com/
 ANTHROPIC_API_KEY = "sk-ant-..."
 
+import os
+
 # Google Sheets service account JSON (place the file in this directory)
-GOOGLE_SHEETS_CREDENTIALS_FILE = "service_account.json"
+GOOGLE_SHEETS_CREDENTIALS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_account.json")
 GOOGLE_SHEET_NAME = "Property Enquiries"
 
 # Your real contact details (used to fill the enquiry form)

@@ -29,23 +29,29 @@ def human_delay(min_ms: int = 800, max_ms: int = 2500):
     time.sleep(random.uniform(min_ms / 1000.0, max_ms / 1000.0))
 
 
-def human_type(element, text: str, wpm_range=(35, 75)):
+def human_type(element, text: str, wpm_range=(35, 75), allow_typos: bool = True):
     """Type text character-by-character with a realistic WPM speed and
-    occasional typo-then-backspace correction to simulate human imperfection."""
+    occasional typo-then-backspace correction to simulate human imperfection.
+
+    Args:
+        allow_typos: Set to False for sensitive fields (e.g. email) where
+                     a failed backspace correction would corrupt the value.
+    """
+    from selenium.webdriver.common.keys import Keys
+
     # Convert WPM to per-character delay (avg 5 chars per word)
     wpm = random.uniform(*wpm_range)
     base_delay = 60.0 / (wpm * 5)  # seconds per character
 
     typo_pool = "qwertyuiopasdfghjklzxcvbnm"  # keys near real ones
     for i, char in enumerate(text):
-        # ~5% chance of a typo on any character
-        if random.random() < 0.05 and len(text) > 4:
+        # ~5% chance of a typo on any character (only when allowed)
+        if allow_typos and random.random() < 0.05 and len(text) > 4:
             wrong = random.choice(typo_pool)
             element.send_keys(wrong)
-            time.sleep(random.uniform(0.08, 0.18))  # pause before noticing mistake
-            from selenium.webdriver.common.keys import Keys
+            time.sleep(random.uniform(0.15, 0.30))  # pause before noticing mistake
             element.send_keys(Keys.BACKSPACE)
-            time.sleep(random.uniform(0.12, 0.25))  # correction pause
+            time.sleep(random.uniform(0.25, 0.45))  # longer correction pause for DOM to update
 
         element.send_keys(char)
         # Variable keystroke delay with occasional micro-pauses (thinking)
@@ -303,9 +309,35 @@ class EnquiryAgent:
 
         return details
 
+    def _reliable_clear(self, driver, element):
+        """Clear a form field reliably using keyboard shortcuts.
+        Works on React-controlled inputs where element.clear() often fails.
+        """
+        from selenium.webdriver.common.keys import Keys
+        # Click to focus
+        element.click()
+        time.sleep(0.1)
+        # Select all text (Ctrl+A) then delete — works universally
+        element.send_keys(Keys.CONTROL + 'a')
+        time.sleep(0.15)
+        element.send_keys(Keys.DELETE)
+        time.sleep(0.15)
+        # Verify the field is empty; if not, try again with backspace flood
+        current_val = driver.execute_script("return arguments[0].value;", element)
+        if current_val:
+            for _ in range(len(current_val) + 5):
+                element.send_keys(Keys.BACKSPACE)
+            time.sleep(0.1)
+
+    def _verify_field_value(self, driver, element, expected: str) -> bool:
+        """Read back the field value via JavaScript and check it matches."""
+        actual = driver.execute_script("return arguments[0].value;", element)
+        return actual.strip() == expected.strip()
+
     def submit_enquiry(self, driver, message: str) -> bool:
         """Finds the enquiry form on the detail page and submits it.
         All interactions use human-paced typing, mouse movement, and pauses.
+        Includes verification + retry logic for the email field.
         """
         print("  [FORM] Locating enquiry form...")
         try:
@@ -331,50 +363,93 @@ class EnquiryAgent:
 
             # --- Fill Name ---
             name_input = driver.find_element(By.CSS_SELECTOR, 'input[name="name"], input[name*="Name"]')
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", name_input)
+            human_delay(200, 400)
             human_mouse_move_to(driver, name_input)
             name_input.click()
             human_delay(200, 450)
-            name_input.clear()
+            self._reliable_clear(driver, name_input)
             print("  [FORM] Typing name...")
             human_type(name_input, ENQUIRY_NAME, wpm_range=(40, 65))
             human_delay(400, 900)   # brief pause after finishing the field
 
-            # --- Fill Email ---
-            email_input = driver.find_element(By.CSS_SELECTOR, 'input[name="email"], input[name*="Email"], input[type="email"]')
-            human_mouse_move_to(driver, email_input)
-            email_input.click()
-            human_delay(250, 550)
-            email_input.clear()
-            print("  [FORM] Typing email...")
-            human_type(email_input, ENQUIRY_EMAIL, wpm_range=(30, 55))
-            human_delay(400, 900)
-
-            # --- Fill Phone ---
+            # --- Fill Phone (moved before email so email verify is closer to submit) ---
             phone_input = driver.find_element(By.CSS_SELECTOR, 'input[name="phone"], input[name*="Phone"], input[type="tel"]')
             human_mouse_move_to(driver, phone_input)
             phone_input.click()
             human_delay(200, 450)
-            phone_input.clear()
+            self._reliable_clear(driver, phone_input)
             print("  [FORM] Typing phone...")
-            human_type(phone_input, ENQUIRY_PHONE, wpm_range=(45, 70))
+            human_type(phone_input, ENQUIRY_PHONE, wpm_range=(45, 70), allow_typos=False)
             human_delay(500, 1100)
+
+            # --- Fill Email (typos DISABLED — emails have strict validation) ---
+            email_input = driver.find_element(By.CSS_SELECTOR, 'input[name="email"], input[name*="Email"], input[type="email"]')
+            email_typed_ok = False
+            for attempt in range(1, 4):  # up to 3 attempts
+                human_mouse_move_to(driver, email_input)
+                email_input.click()
+                human_delay(250, 550)
+                self._reliable_clear(driver, email_input)
+                print(f"  [FORM] Typing email (attempt {attempt})...")
+                human_type(email_input, ENQUIRY_EMAIL, wpm_range=(30, 55), allow_typos=False)
+                human_delay(400, 900)
+
+                # --- Verify the email was typed correctly ---
+                if self._verify_field_value(driver, email_input, ENQUIRY_EMAIL):
+                    print("  [FORM] Email verified OK.")
+                    email_typed_ok = True
+                    break
+                else:
+                    actual = driver.execute_script("return arguments[0].value;", email_input)
+                    print(f"  [WARN] Email mismatch! Expected '{ENQUIRY_EMAIL}' but got '{actual}'. Retrying...")
+                    human_delay(500, 1000)
+
+            if not email_typed_ok:
+                # Last resort: force-set via JavaScript and trigger change event
+                print("  [WARN] Email retry failed 3 times. Force-setting via JS.")
+                driver.execute_script(
+                    "var el = arguments[0]; "
+                    "var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; "
+                    "nativeInputValueSetter.call(el, arguments[1]); "
+                    "el.dispatchEvent(new Event('input', { bubbles: true })); "
+                    "el.dispatchEvent(new Event('change', { bubbles: true }));",
+                    email_input, ENQUIRY_EMAIL
+                )
+                human_delay(300, 600)
 
             # --- Fill Message (longest field — type slowest) ---
             msg_input = driver.find_element(By.CSS_SELECTOR, 'textarea[name="message"], textarea[name*="Message"]')
             human_mouse_move_to(driver, msg_input)
             msg_input.click()
             human_delay(400, 800)   # pause as if thinking about what to write
-            msg_input.clear()
+            self._reliable_clear(driver, msg_input)
             print("  [FORM] Typing message (this will take a moment)...")
             human_type(msg_input, message, wpm_range=(28, 50))
             human_delay(800, 1800)  # review pause after writing message
 
-            # --- Locate submit button (do not click in test mode) ---
+            # --- Final email sanity check before submit ---
+            final_email = driver.execute_script("return arguments[0].value;", email_input)
+            if final_email.strip() != ENQUIRY_EMAIL.strip():
+                print(f"  [WARN] Final email check failed: '{final_email}'. Force-correcting...")
+                driver.execute_script(
+                    "var el = arguments[0]; "
+                    "var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; "
+                    "nativeInputValueSetter.call(el, arguments[1]); "
+                    "el.dispatchEvent(new Event('input', { bubbles: true })); "
+                    "el.dispatchEvent(new Event('change', { bubbles: true }));",
+                    email_input, ENQUIRY_EMAIL
+                )
+                human_delay(300, 500)
+
+            # --- Locate submit button and click ---
             submit_btn = driver.find_element(By.XPATH, '//button[@type="submit" or contains(translate(text(), "SEND", "send"), "send")]')
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_btn)
+            human_delay(300, 600)
             human_mouse_move_to(driver, submit_btn)
-            human_delay(300, 700)   # hover briefly over submit, then stop
-            # driver.execute_script("arguments[0].click();", submit_btn)
-            print("  [FORM] Form filled successfully! (Submit click is currently commented out for testing).")
+            human_delay(300, 700)   # hover briefly over submit, then click
+            driver.execute_script("arguments[0].click();", submit_btn)
+            print("  [FORM] Form filled and submitted successfully!")
             return True
 
         except Exception as e:
@@ -420,8 +495,10 @@ class EnquiryAgent:
                 time.strftime("%Y-%m-%d %H:%M:%S"),
                 detail_info.get("property_id", "")
             ]
-            self.sheet.append_row(row)
-            print("  [OK] Saved to Google Sheets.")
+            # Find the next empty row dynamically to avoid Google Sheets API append bugs with empty columns
+            next_row = len(self.sheet.get_all_values()) + 1
+            self.sheet.update(range_name=f"A{next_row}", values=[row])
+            print(f"  [OK] Saved to Google Sheets at row {next_row}.")
         except Exception as e:
             print(f"  [ERROR] Failed to save to Google Sheets: {e}")
 

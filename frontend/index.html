@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRE Scraper Dashboard</title>
+    <title>LBKN Property Automator</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -18,11 +18,13 @@
     <div class="dashboard-container">
         <header>
             <h1>LBKN Automator</h1>
-            <p>Configure parameters and start sourcing.</p>
+            <p>End-to-end commercial property sourcing, enquiry & reply tracking.</p>
         </header>
 
         <main>
+            <!-- ============ PHASE 1+2: SCRAPER FORM ============ -->
             <form id="scrape-form" class="glass-panel">
+                <h2 class="section-title">Property Search</h2>
                 <div class="form-group">
                     <label for="location">Location *</label>
                     <input type="text" id="location" name="location" placeholder="e.g. Melbourne Region VIC" required>
@@ -68,6 +70,7 @@
                 <button type="submit" id="start-btn">Start Sourcing</button>
             </form>
 
+            <!-- Scraper Status -->
             <div id="status-panel" class="glass-panel hidden">
                 <div class="status-header">
                     <h2>Scraping Status</h2>
@@ -79,8 +82,9 @@
                 <p id="status-text">Ready to start.</p>
             </div>
 
+            <!-- Scraper Results -->
             <div id="results-panel" class="glass-panel hidden">
-                <h2>Results</h2>
+                <h2>Scrape Results</h2>
                 <div class="table-container">
                     <table id="results-table">
                         <thead>
@@ -98,6 +102,47 @@
                     </table>
                 </div>
             </div>
+
+            <!-- ============ PHASE 3: EMAIL REPLY MONITOR ============ -->
+            <div class="glass-panel" id="reply-section">
+                <div class="status-header">
+                    <h2 class="section-title">Reply Monitor</h2>
+                    <span id="reply-badge" class="badge">Idle</span>
+                </div>
+                <p class="section-desc">Scan your Outlook inbox for property agent replies. Claude AI will extract pricing data and update Google Sheets.</p>
+
+                <div class="reply-actions">
+                    <button type="button" id="check-inbox-btn">Check Inbox for Replies</button>
+                    <button type="button" id="preview-inbox-btn" class="btn-secondary">Preview Unread Emails</button>
+                </div>
+
+                <!-- Reply Status -->
+                <div id="reply-status-panel" class="hidden" style="margin-top: 1.5rem;">
+                    <div class="progress-bar-container">
+                        <div id="reply-progress-bar" class="progress-bar"></div>
+                    </div>
+                    <p id="reply-status-text"></p>
+                </div>
+
+                <!-- Email Preview Table -->
+                <div id="email-preview-panel" class="hidden" style="margin-top: 1.5rem;">
+                    <h3 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: var(--text-secondary);">Unread Emails</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>From</th>
+                                    <th>Subject</th>
+                                    <th>Date</th>
+                                    <th>Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody id="email-preview-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 

@@ -4,6 +4,8 @@ Run: python run.py
 """
 import sys
 import io
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Fix Windows console unicode errors
 if sys.stdout.encoding.lower() != 'utf-8':

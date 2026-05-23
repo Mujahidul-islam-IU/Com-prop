@@ -50,3 +50,6 @@ page.html
 
 # === LOGS ===
 *.log
+
+# === ARCHIVE ===
+_archive/

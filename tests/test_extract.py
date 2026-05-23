@@ -4,7 +4,7 @@ import time
 
 options = uc.ChromeOptions()
 options.add_argument("--disable-popup-blocking")
-driver = uc.Chrome(options=options, use_subprocess=True)
+driver = uc.Chrome(options=options, use_subprocess=True, version_main=148)
 
 try:
     print("Loading URL...")

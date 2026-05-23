@@ -8,6 +8,7 @@
     --accent-hover: #2563EB;
     --error: #EF4444;
     --success: #10B981;
+    --warning: #F59E0B;
 }
 
 * {
@@ -63,7 +64,7 @@ body {
 
 .dashboard-container {
     width: 100%;
-    max-width: 800px;
+    max-width: 900px;
     display: flex;
     flex-direction: column;
     gap: 2rem;
@@ -96,6 +97,22 @@ header p {
 
 .hidden {
     display: none !important;
+}
+
+.section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    background: linear-gradient(to right, #60A5FA, #818CF8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.section-desc {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.6;
 }
 
 .form-group {
@@ -162,6 +179,24 @@ button:disabled {
     transform: none;
 }
 
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.reply-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.reply-actions button {
+    flex: 1;
+}
+
 .status-header {
     display: flex;
     justify-content: space-between;
@@ -208,7 +243,7 @@ button:disabled {
     100% { transform: translateX(400%); }
 }
 
-#status-text {
+#status-text, #reply-status-text {
     font-size: 0.9rem;
     color: var(--text-secondary);
 }
@@ -226,17 +261,29 @@ table {
 
 th, td {
     text-align: left;
-    padding: 1rem;
+    padding: 0.85rem 1rem;
     border-bottom: 1px solid var(--border-color);
 }
 
 th {
     color: var(--text-secondary);
     font-weight: 500;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 td {
     color: var(--text-primary);
+}
+
+.preview-cell {
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
 }
 
 a {
@@ -245,4 +292,14 @@ a {
 }
 a:hover {
     text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .form-row, .reply-actions {
+        flex-direction: column;
+    }
+    header h1 {
+        font-size: 1.75rem;
+    }
 }

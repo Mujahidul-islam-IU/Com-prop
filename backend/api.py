@@ -1,4 +1,7 @@
+import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import uuid
 import threading
 from fastapi import FastAPI, BackgroundTasks
@@ -9,9 +12,10 @@ from pydantic import BaseModel
 from typing import Optional
 
 from scraper import run_scraper
+import email_monitor
 from config import OUTPUT_DIR, FETCH_DETAILS
 
-app = FastAPI()
+app = FastAPI(title="LBKN CRE Automator")
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,25 +54,63 @@ def run_scraper_task(job_id: str, req: ScrapeRequest):
         jobs[job_id]["error"] = str(e)
         print(f"Scraper error: {e}")
 
+# ============================================================
+#  Phase 1+2: Property Scraping & Enquiry Endpoints
+# ============================================================
+
 @app.post("/api/scrape")
 def start_scrape(req: ScrapeRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "starting", "results": None, "error": None}
-    
+
     # Run in a separate thread so it doesn't block the event loop
     thread = threading.Thread(target=run_scraper_task, args=(job_id, req))
     thread.start()
-    
+
     return {"job_id": job_id, "status": "started"}
 
 @app.get("/api/status/{job_id}")
 def get_status(job_id: str):
     return jobs.get(job_id, {"status": "not_found"})
 
-# Create frontend dir if it doesn't exist
-os.makedirs("frontend", exist_ok=True)
+# ============================================================
+#  Phase 3: Email Reply Monitor Endpoints
+# ============================================================
 
-# Mount frontend
+@app.post("/api/check-replies")
+def check_replies():
+    """Trigger the email monitor to scan inbox for agent replies."""
+    try:
+        result = email_monitor.run_monitor()
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/recent-emails")
+def recent_emails():
+    """Fetch last 5 emails for display in frontend (no Claude needed)."""
+    try:
+        token = email_monitor.get_graph_token()
+        if not token:
+            return {"status": "error", "emails": []}
+        emails = email_monitor.fetch_unread_emails(token)
+        summary = []
+        for msg in emails[:5]:
+            summary.append({
+                "subject": msg.get("subject", ""),
+                "from": msg.get("sender", {}).get("emailAddress", {}).get("address", ""),
+                "date": msg.get("receivedDateTime", "").split("T")[0],
+                "preview": msg.get("bodyPreview", "")[:120]
+            })
+        return {"status": "ok", "count": len(emails), "emails": summary}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "emails": []}
+
+# ============================================================
+#  Frontend Serving
+# ============================================================
+
+os.makedirs("frontend", exist_ok=True)
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 @app.get("/")

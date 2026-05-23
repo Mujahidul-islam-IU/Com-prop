@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+undetected-chromedriver
+selenium
+gspread
+oauth2client
+anthropic
+requests
+msal
