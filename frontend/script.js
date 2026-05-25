@@ -33,6 +33,7 @@ document.getElementById('scrape-form').addEventListener('submit', async (e) => {
         location: form.location.value,
         keyword: form.keyword.value,
         min_size: form.min_size.value ? parseInt(form.min_size.value) : 0,
+        max_size: form.max_size.value ? parseInt(form.max_size.value) : 0,
         listing_type: form.listing_type.value,
         max_pages: parseInt(form.max_pages.value) || 1
     };

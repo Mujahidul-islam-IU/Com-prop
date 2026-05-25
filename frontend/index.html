@@ -41,18 +41,19 @@
 
                     <div class="form-group">
                         <label for="keyword">Property Type</label>
-                        <select id="keyword" name="keyword">
-                            <option value="">All Types</option>
+                        <input type="text" id="keyword" name="keyword" list="keyword-options" placeholder="e.g. office, warehouse, home...">
+                        <datalist id="keyword-options">
                             <option value="office">Offices</option>
                             <option value="serviced-offices">Serviced Offices</option>
-                            <option value="retail">Shop & Retail</option>
-                            <option value="industrial">Factory, Warehouse & Industrial</option>
+                            <option value="retail">Shop &amp; Retail</option>
+                            <option value="industrial">Factory, Warehouse &amp; Industrial</option>
                             <option value="land">Development / Land</option>
                             <option value="medical">Medical / Consulting</option>
                             <option value="parking">Parking / Car Space</option>
                             <option value="rural">Rural / Farming</option>
                             <option value="showrooms">Showrooms / Bulky Goods</option>
-                        </select>
+                            <option value="home">Home / Residential</option>
+                        </datalist>
                     </div>
                 </div>
 
@@ -60,6 +61,10 @@
                     <div class="form-group">
                         <label for="min_size">Min Size (sqm)</label>
                         <input type="number" id="min_size" name="min_size" placeholder="e.g. 210" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="max_size">Max Size (sqm)</label>
+                        <input type="number" id="max_size" name="max_size" placeholder="e.g. 1000" min="0">
                     </div>
                     <div class="form-group">
                         <label for="max_pages">Max Pages</label>
@@ -146,7 +151,7 @@
         </main>
     </div>
 
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js?v=2"></script>
 </body>
 
 </html>

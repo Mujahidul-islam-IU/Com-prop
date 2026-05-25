@@ -31,6 +31,7 @@ class ScrapeRequest(BaseModel):
     location: str
     keyword: Optional[str] = ""
     min_size: Optional[int] = 0
+    max_size: Optional[int] = 0
     listing_type: str = "for-lease"
     max_pages: Optional[int] = 1
 
@@ -41,6 +42,7 @@ def run_scraper_task(job_id: str, req: ScrapeRequest):
             location=req.location,
             keyword=req.keyword,
             min_size=req.min_size,
+            max_size=req.max_size,
             listing_type=req.listing_type,
             max_pages=req.max_pages,
             fetch_details=FETCH_DETAILS,

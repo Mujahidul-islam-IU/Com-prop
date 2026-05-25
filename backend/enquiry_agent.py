@@ -2,6 +2,7 @@ import os
 import json
 import time
 import random
+import re
 from typing import Dict, Optional
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -21,7 +22,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 # Import configs
 from config import (
     ANTHROPIC_API_KEY, GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEET_NAME,
-    ENQUIRY_NAME, ENQUIRY_EMAIL, ENQUIRY_PHONE, CLAUDE_PROMPT_CRITERIA
+    ENQUIRY_NAME, ENQUIRY_EMAIL, ENQUIRY_PHONE, ENQUIRY_MESSAGE_TEMPLATE,
+    CLAUDE_PROMPT_CRITERIA,
 )
 
 def human_delay(min_ms: int = 800, max_ms: int = 2500):
@@ -29,35 +31,44 @@ def human_delay(min_ms: int = 800, max_ms: int = 2500):
     time.sleep(random.uniform(min_ms / 1000.0, max_ms / 1000.0))
 
 
-def human_type(element, text: str, wpm_range=(35, 75), allow_typos: bool = True):
-    """Type text character-by-character with a realistic WPM speed and
-    occasional typo-then-backspace correction to simulate human imperfection.
-
-    Args:
-        allow_typos: Set to False for sensitive fields (e.g. email) where
-                     a failed backspace correction would corrupt the value.
+def human_type(element, text: str, wpm_range=(35, 75), allow_typos: bool = False):
+    """Type text character-by-character with a realistic WPM speed.
+    Artificial typos have been disabled to ensure stability with React forms.
     """
-    from selenium.webdriver.common.keys import Keys
-
     # Convert WPM to per-character delay (avg 5 chars per word)
     wpm = random.uniform(*wpm_range)
     base_delay = 60.0 / (wpm * 5)  # seconds per character
 
-    typo_pool = "qwertyuiopasdfghjklzxcvbnm"  # keys near real ones
-    for i, char in enumerate(text):
-        # ~5% chance of a typo on any character (only when allowed)
-        if allow_typos and random.random() < 0.05 and len(text) > 4:
-            wrong = random.choice(typo_pool)
-            element.send_keys(wrong)
-            time.sleep(random.uniform(0.15, 0.30))  # pause before noticing mistake
-            element.send_keys(Keys.BACKSPACE)
-            time.sleep(random.uniform(0.25, 0.45))  # longer correction pause for DOM to update
-
+    for char in text:
         element.send_keys(char)
         # Variable keystroke delay with occasional micro-pauses (thinking)
-        delay = base_delay * random.uniform(0.5, 2.2)
-        if random.random() < 0.08:          # ~8% chance of a longer hesitation
-            delay += random.uniform(0.15, 0.6)
+        delay = base_delay * random.uniform(0.5, 1.8)
+        if random.random() < 0.05:          # ~5% chance of a longer hesitation
+            delay += random.uniform(0.1, 0.4)
+        time.sleep(delay)
+
+
+def human_type_cdp(driver, element, text: str, wpm_range=(35, 75)):
+    """Type text using Chrome DevTools Protocol (CDP) — works even when Chrome
+    is in the background / unfocused.  send_keys relies on OS-level keyboard
+    focus, so characters get silently dropped when the window isn't active.
+    CDP's Input.dispatchKeyEvent bypasses the OS input queue entirely.
+    """
+    # Focus the element first via JS (CDP needs a focused target)
+    driver.execute_script(
+        "arguments[0].focus(); arguments[0].click();", element
+    )
+    time.sleep(0.15)
+
+    wpm = random.uniform(*wpm_range)
+    base_delay = 60.0 / (wpm * 5)
+
+    for char in text:
+        # Use CDP insertText command — most reliable for React controlled inputs
+        driver.execute_cdp_cmd("Input.insertText", {"text": char})
+        delay = base_delay * random.uniform(0.5, 1.8)
+        if random.random() < 0.05:
+            delay += random.uniform(0.1, 0.4)
         time.sleep(delay)
 
 
@@ -124,38 +135,20 @@ class EnquiryAgent:
         else:
             print("  [WARN] Anthropic API Key not set. Skipping LLM integration.")
 
-    def get_claude_enquiry_message(self, property_description: str) -> str:
-        """Uses Claude to generate a custom enquiry message based on the description."""
-        if not self.anthropic_client:
-            return "Hi, I am interested in this property. Could you please send me more details?"
+    def get_enquiry_message(self, agent_name_raw: str) -> str:
+        """Build the enquiry message using the fixed template from config.
+        Substitutes the agent's first name, or 'there' if unknown."""
+        agent_first = "there"
+        if agent_name_raw:
+            # Take the first agent name before any delimiter (| , /)
+            first_agent = re.split(r'[|,/]', agent_name_raw)[0].strip()
+            if first_agent:
+                # Take first name only
+                agent_first = first_agent.split()[0].strip()
 
-        print("  [LLM] Generating custom enquiry message via Claude...")
-        try:
-            response = self.anthropic_client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=300,
-                temperature=0.7,
-                system=CLAUDE_PROMPT_CRITERIA,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Here is the property description:\n\n{property_description}"
-                    }
-                ]
-            )
-            # Assuming response.content[0].text is the message
-            msg = response.content[0].text.strip()
-            print(f"  [LLM] Generated message: {msg[:100]}...")
-            return msg
-        except Exception as e:
-            err_str = str(e)
-            if "credit balance" in err_str or "credit_balance" in err_str:
-                print(f"  [ERROR] Anthropic API credits exhausted. Disabling Claude for this session.")
-                print(f"  [INFO]  Please top up credits at: https://console.anthropic.com/settings/billing")
-                self.anthropic_client = None  # Disable to avoid repeated failures
-            else:
-                print(f"  [ERROR] Claude API call failed: {e}")
-            return "Hi, I am interested in this property. Could you please send me more details? I would love to learn more about the price, availability, and any other relevant information."
+        message = ENQUIRY_MESSAGE_TEMPLATE.format(agent_name=agent_first)
+        print(f"  [MSG] Using template message (agent: {agent_first})")
+        return message
 
     def extract_property_details(self, driver, url: str) -> Dict[str, str]:
         """Visits the property detail page and extracts the full description and other info."""
@@ -309,35 +302,183 @@ class EnquiryAgent:
 
         return details
 
-    def _reliable_clear(self, driver, element):
-        """Clear a form field reliably using keyboard shortcuts.
-        Works on React-controlled inputs where element.clear() often fails.
+    def _reliable_clear_cdp(self, driver, element):
+        """Clear a form field using CDP — works even when Chrome is backgrounded.
+        Falls back to JS-based clearing if CDP clear fails.
         """
-        from selenium.webdriver.common.keys import Keys
-        # Click to focus
-        element.click()
-        time.sleep(0.1)
-        # Select all text (Ctrl+A) then delete — works universally
-        element.send_keys(Keys.CONTROL + 'a')
+        # Focus the element
+        driver.execute_script("arguments[0].focus(); arguments[0].click();", element)
         time.sleep(0.15)
-        element.send_keys(Keys.DELETE)
-        time.sleep(0.15)
-        # Verify the field is empty; if not, try again with backspace flood
+
+        # Select all via CDP keyboard shortcut
+        try:
+            driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+                "type": "keyDown", "key": "a", "code": "KeyA",
+                "windowsVirtualKeyCode": 65, "modifiers": 2  # 2 = Ctrl
+            })
+            time.sleep(0.05)
+            driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+                "type": "keyUp", "key": "a", "code": "KeyA",
+                "windowsVirtualKeyCode": 65, "modifiers": 2
+            })
+            time.sleep(0.1)
+            # Delete the selected text
+            driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+                "type": "keyDown", "key": "Backspace", "code": "Backspace",
+                "windowsVirtualKeyCode": 8
+            })
+            time.sleep(0.05)
+            driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+                "type": "keyUp", "key": "Backspace", "code": "Backspace",
+                "windowsVirtualKeyCode": 8
+            })
+            time.sleep(0.15)
+        except Exception:
+            # Fallback: JS-based clear
+            pass
+
+        # Verify it's empty; if not, brute-force clear via JS
         current_val = driver.execute_script("return arguments[0].value;", element)
         if current_val:
-            for _ in range(len(current_val) + 5):
-                element.send_keys(Keys.BACKSPACE)
-            time.sleep(0.1)
+            self._force_react_value(driver, element, "",
+                                    is_textarea=(element.tag_name.lower() == "textarea"))
+            time.sleep(0.15)
 
     def _verify_field_value(self, driver, element, expected: str) -> bool:
         """Read back the field value via JavaScript and check it matches."""
         actual = driver.execute_script("return arguments[0].value;", element)
         return actual.strip() == expected.strip()
 
+    def _force_react_value(self, driver, element, value: str, is_textarea: bool = False):
+        """Force sets the value of a React-controlled input/textarea using the
+        native prototype setter and dispatches the full event sequence that React's
+        synthetic event system listens for: focus → focusin → input → change → blur.
+        """
+        prototype = "HTMLTextAreaElement" if is_textarea else "HTMLInputElement"
+        driver.execute_script("""
+            var el = arguments[0];
+            var value = arguments[1];
+            var proto = arguments[2];
+
+            // 1. Focus the element
+            el.focus();
+            el.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+            // 2. Use the native setter to bypass React's value lock
+            var setter = Object.getOwnPropertyDescriptor(
+                window[proto].prototype, 'value'
+            );
+            if (setter && setter.set) {
+                setter.set.call(el, value);
+            } else {
+                el.value = value;
+            }
+
+            // 3. Fire InputEvent (React 16+ listens for this, not generic Event)
+            el.dispatchEvent(new InputEvent('input', {
+                bubbles: true, cancelable: true,
+                inputType: 'insertText', data: value
+            }));
+
+            // 4. Fire change event
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // 5. Blur to trigger any onBlur validation the form may have
+            el.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+            el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+        """, element, value, prototype)
+
+    def _fill_field_reliably(self, driver, element, value: str,
+                              field_name: str, is_textarea: bool = False,
+                              wpm_range=(35, 65)):
+        """Fill a single form field with guaranteed correctness.
+
+        Strategy:
+          1. Clear field using CDP
+          2. Type via CDP (works in background)
+          3. Verify value matches
+          4. If mismatch → force-set via React JS injection + verify again
+          5. Repeat up to 3 full cycles
+        """
+        for cycle in range(1, 4):
+            # Clear
+            self._reliable_clear_cdp(driver, element)
+            human_delay(150, 300)
+
+            # Type via CDP
+            print(f"  [FORM] Typing {field_name} (cycle {cycle})...")
+            human_type_cdp(driver, element, value, wpm_range=wpm_range)
+            human_delay(300, 600)
+
+            # Verify
+            if self._verify_field_value(driver, element, value):
+                print(f"  [FORM] {field_name} verified OK.")
+                return True
+
+            actual = driver.execute_script("return arguments[0].value;", element)
+            print(f"  [WARN] {field_name} mismatch after CDP typing! "
+                  f"Expected '{value[:40]}...' but got '{actual[:40]}...'. "
+                  f"Force-correcting...")
+
+            # Force-set via React-aware JS
+            self._force_react_value(driver, element, value, is_textarea=is_textarea)
+            human_delay(300, 500)
+
+            if self._verify_field_value(driver, element, value):
+                print(f"  [FORM] {field_name} verified OK after JS force-set.")
+                return True
+
+            print(f"  [WARN] {field_name} still wrong after cycle {cycle}. "
+                  f"{'Retrying...' if cycle < 3 else 'Giving up on re-type, will catch in final gate.'}")
+            human_delay(300, 500)
+
+        return False
+
+    def _verify_all_fields_before_submit(self, driver, fields: dict) -> bool:
+        """Final validation gate: checks ALL form fields match their expected
+        values.  If any field is wrong, force-corrects it and re-checks.
+        Returns True only when every field is confirmed correct.
+
+        `fields` is a dict of { "Name": (element, expected_value, is_textarea), ... }
+        """
+        MAX_GATE_ATTEMPTS = 3
+        for gate_attempt in range(1, MAX_GATE_ATTEMPTS + 1):
+            all_ok = True
+            for field_name, (element, expected, is_textarea) in fields.items():
+                actual = driver.execute_script("return arguments[0].value;", element)
+                if actual.strip() != expected.strip():
+                    all_ok = False
+                    print(f"  [GATE] {field_name} FAILED (attempt {gate_attempt}): "
+                          f"got '{actual[:50]}...' — force-correcting...")
+                    self._force_react_value(driver, element, expected, is_textarea=is_textarea)
+                    human_delay(200, 400)
+
+            if all_ok:
+                print("  [GATE] ✓ All fields verified — safe to submit.")
+                return True
+
+            human_delay(300, 600)
+
+        # Last resort: one more read to see where we stand
+        still_bad = []
+        for field_name, (element, expected, is_textarea) in fields.items():
+            actual = driver.execute_script("return arguments[0].value;", element)
+            if actual.strip() != expected.strip():
+                still_bad.append(field_name)
+        if still_bad:
+            print(f"  [GATE] ✗ Fields still incorrect after {MAX_GATE_ATTEMPTS} attempts: {still_bad}")
+            return False
+        return True
+
     def submit_enquiry(self, driver, message: str) -> bool:
         """Finds the enquiry form on the detail page and submits it.
-        All interactions use human-paced typing, mouse movement, and pauses.
-        Includes verification + retry logic for the email field.
+
+        Uses CDP-based typing (background-safe) with multi-layer verification:
+          1. Type each field via CDP (works even when Chrome is unfocused)
+          2. Verify each field immediately after typing
+          3. Force-correct any mismatches via React-aware JS injection
+          4. Run a final validation gate on ALL fields before clicking Submit
+          5. Only click Submit if every field is confirmed correct
         """
         print("  [FORM] Locating enquiry form...")
         try:
@@ -346,11 +487,11 @@ class EnquiryAgent:
             for btn in enquire_btns:
                 if btn.is_displayed():
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
-                    human_delay(600, 1400)          # pause before clicking
+                    human_delay(600, 1400)
                     human_mouse_move_to(driver, btn)
                     driver.execute_script("arguments[0].click();", btn)
                     print("  [FORM] Clicked 'Enquire' button to open modal.")
-                    human_delay(1800, 3000)          # wait for modal animation
+                    human_delay(1800, 3000)
                     break
 
             # Wait for form inputs to be visible
@@ -361,95 +502,60 @@ class EnquiryAgent:
             # --- A moment of hesitation before starting to fill the form ---
             human_delay(500, 1200)
 
+            # --- Locate all form elements up front ---
+            name_input  = driver.find_element(By.CSS_SELECTOR, 'input[name="name"], input[name*="Name"]')
+            phone_input = driver.find_element(By.CSS_SELECTOR, 'input[name="phone"], input[name*="Phone"], input[type="tel"]')
+            email_input = driver.find_element(By.CSS_SELECTOR, 'input[name="email"], input[name*="Email"], input[type="email"]')
+            msg_input   = driver.find_element(By.CSS_SELECTOR, 'textarea[name="message"], textarea[name*="Message"]')
+
             # --- Fill Name ---
-            name_input = driver.find_element(By.CSS_SELECTOR, 'input[name="name"], input[name*="Name"]')
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", name_input)
             human_delay(200, 400)
             human_mouse_move_to(driver, name_input)
-            name_input.click()
-            human_delay(200, 450)
-            self._reliable_clear(driver, name_input)
-            print("  [FORM] Typing name...")
-            human_type(name_input, ENQUIRY_NAME, wpm_range=(40, 65))
-            human_delay(400, 900)   # brief pause after finishing the field
+            self._fill_field_reliably(driver, name_input, ENQUIRY_NAME,
+                                       "Name", is_textarea=False, wpm_range=(40, 65))
+            human_delay(400, 900)
 
-            # --- Fill Phone (moved before email so email verify is closer to submit) ---
-            phone_input = driver.find_element(By.CSS_SELECTOR, 'input[name="phone"], input[name*="Phone"], input[type="tel"]')
+            # --- Fill Phone ---
             human_mouse_move_to(driver, phone_input)
-            phone_input.click()
-            human_delay(200, 450)
-            self._reliable_clear(driver, phone_input)
-            print("  [FORM] Typing phone...")
-            human_type(phone_input, ENQUIRY_PHONE, wpm_range=(45, 70), allow_typos=False)
+            self._fill_field_reliably(driver, phone_input, ENQUIRY_PHONE,
+                                       "Phone", is_textarea=False, wpm_range=(45, 70))
             human_delay(500, 1100)
 
-            # --- Fill Email (typos DISABLED — emails have strict validation) ---
-            email_input = driver.find_element(By.CSS_SELECTOR, 'input[name="email"], input[name*="Email"], input[type="email"]')
-            email_typed_ok = False
-            for attempt in range(1, 4):  # up to 3 attempts
-                human_mouse_move_to(driver, email_input)
-                email_input.click()
-                human_delay(250, 550)
-                self._reliable_clear(driver, email_input)
-                print(f"  [FORM] Typing email (attempt {attempt})...")
-                human_type(email_input, ENQUIRY_EMAIL, wpm_range=(30, 55), allow_typos=False)
-                human_delay(400, 900)
+            # --- Fill Email ---
+            human_mouse_move_to(driver, email_input)
+            self._fill_field_reliably(driver, email_input, ENQUIRY_EMAIL,
+                                       "Email", is_textarea=False, wpm_range=(30, 55))
+            human_delay(400, 900)
 
-                # --- Verify the email was typed correctly ---
-                if self._verify_field_value(driver, email_input, ENQUIRY_EMAIL):
-                    print("  [FORM] Email verified OK.")
-                    email_typed_ok = True
-                    break
-                else:
-                    actual = driver.execute_script("return arguments[0].value;", email_input)
-                    print(f"  [WARN] Email mismatch! Expected '{ENQUIRY_EMAIL}' but got '{actual}'. Retrying...")
-                    human_delay(500, 1000)
-
-            if not email_typed_ok:
-                # Last resort: force-set via JavaScript and trigger change event
-                print("  [WARN] Email retry failed 3 times. Force-setting via JS.")
-                driver.execute_script(
-                    "var el = arguments[0]; "
-                    "var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; "
-                    "nativeInputValueSetter.call(el, arguments[1]); "
-                    "el.dispatchEvent(new Event('input', { bubbles: true })); "
-                    "el.dispatchEvent(new Event('change', { bubbles: true }));",
-                    email_input, ENQUIRY_EMAIL
-                )
-                human_delay(300, 600)
-
-            # --- Fill Message (longest field — type slowest) ---
-            msg_input = driver.find_element(By.CSS_SELECTOR, 'textarea[name="message"], textarea[name*="Message"]')
+            # --- Fill Message (longest field) ---
             human_mouse_move_to(driver, msg_input)
-            msg_input.click()
-            human_delay(400, 800)   # pause as if thinking about what to write
-            self._reliable_clear(driver, msg_input)
-            print("  [FORM] Typing message (this will take a moment)...")
-            human_type(msg_input, message, wpm_range=(28, 50))
-            human_delay(800, 1800)  # review pause after writing message
+            human_delay(400, 800)
+            self._fill_field_reliably(driver, msg_input, message,
+                                       "Message", is_textarea=True, wpm_range=(28, 50))
+            human_delay(800, 1800)
 
-            # --- Final email sanity check before submit ---
-            final_email = driver.execute_script("return arguments[0].value;", email_input)
-            if final_email.strip() != ENQUIRY_EMAIL.strip():
-                print(f"  [WARN] Final email check failed: '{final_email}'. Force-correcting...")
-                driver.execute_script(
-                    "var el = arguments[0]; "
-                    "var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; "
-                    "nativeInputValueSetter.call(el, arguments[1]); "
-                    "el.dispatchEvent(new Event('input', { bubbles: true })); "
-                    "el.dispatchEvent(new Event('change', { bubbles: true }));",
-                    email_input, ENQUIRY_EMAIL
-                )
-                human_delay(300, 500)
+            # ============================================================
+            #  FINAL VALIDATION GATE — do NOT submit unless ALL fields OK
+            # ============================================================
+            fields_to_check = {
+                "Name":    (name_input,  ENQUIRY_NAME,  False),
+                "Phone":   (phone_input, ENQUIRY_PHONE, False),
+                "Email":   (email_input, ENQUIRY_EMAIL, False),
+                "Message": (msg_input,   message,       True),
+            }
+            if not self._verify_all_fields_before_submit(driver, fields_to_check):
+                print("  [ERROR] Form fields could not be verified. SKIPPING submit to avoid empty enquiry.")
+                return False
 
             # --- Locate submit button and click ---
             submit_btn = driver.find_element(By.XPATH, '//button[@type="submit" or contains(translate(text(), "SEND", "send"), "send")]')
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_btn)
             human_delay(300, 600)
             human_mouse_move_to(driver, submit_btn)
-            human_delay(300, 700)   # hover briefly over submit, then click
+            human_delay(300, 700)
             driver.execute_script("arguments[0].click();", submit_btn)
-            print("  [FORM] Form filled and submitted successfully!")
+            print("  [FORM] ✓ Form filled and submitted successfully!")
             return True
 
         except Exception as e:
@@ -470,34 +576,55 @@ class EnquiryAgent:
             return False
 
     def log_to_sheet(self, listing: dict, detail_info: dict, message: str, status: str):
-        """Appends the result to Google Sheets."""
+        """Appends the result to Google Sheets by mapping data to column headers."""
         if not self.sheet:
             return
         
         try:
+            # Get headers to map data correctly
+            headers = self.sheet.row_values(1)
+            
+            # If headers are empty, we can't reliably map, so we'll just append
+            if not headers:
+                print("  [WARN] Sheet has no headers in row 1. Cannot map columns.")
+                return
+
             tags_val = " | ".join(listing.get("tags", [])) if isinstance(listing.get("tags"), list) else listing.get("tags", "")
             
-            row = [
-                listing.get("title", ""),
-                listing.get("address", ""),
-                listing.get("price", ""),
-                listing.get("propertyType", ""),
-                listing.get("size", ""),
-                listing.get("agent", ""),
-                "", # agent_mail (not extracted currently)
-                listing.get("agency", ""),
-                listing.get("link", ""),
-                listing.get("image", ""),
-                tags_val,
-                listing.get("page_num", ""),
-                listing.get("location_query", ""),
-                message,
-                time.strftime("%Y-%m-%d %H:%M:%S"),
-                detail_info.get("property_id", "")
-            ]
-            # Find the next empty row dynamically to avoid Google Sheets API append bugs with empty columns
+            # Create an empty row of the same length as headers
+            row_data = [""] * len(headers)
+            
+            # Helper to safely set a value if the column exists
+            def set_col(col_names, val):
+                for name in col_names:
+                    # Match case-insensitive
+                    idx = next((i for i, h in enumerate(headers) if h.lower().strip() == name.lower()), -1)
+                    if idx != -1:
+                        row_data[idx] = val
+                        return
+
+            set_col(["title", "Title"], listing.get("title", ""))
+            set_col(["address", "Address"], listing.get("address", ""))
+            set_col(["price", "Price", "Asking prize"], listing.get("price", ""))
+            set_col(["propertyType", "Property Type"], listing.get("propertyType", ""))
+            set_col(["size", "Size (sqm)"], listing.get("size", ""))
+            set_col(["agent", "Agent"], listing.get("agent", ""))
+            set_col(["agency", "Agency"], listing.get("agency", ""))
+            set_col(["link", "Listing Link"], listing.get("link", ""))
+            set_col(["image", "Image"], listing.get("image", ""))
+            set_col(["tags", "Tags"], tags_val)
+            set_col(["page_num", "Page Num"], listing.get("page_num", ""))
+            set_col(["location_query", "Location Query"], listing.get("location_query", ""))
+            set_col(["message", "agent_message", "Message"], message)
+            set_col(["scraped_at", "Scraped At"], time.strftime("%Y-%m-%d %H:%M:%S"))
+            set_col(["property_id", "PID"], detail_info.get("property_id", ""))
+            
+            # The new Purchase Price column requested by user
+            set_col(["Purchase Price", "Purchase price"], listing.get("price", ""))
+
+            # Append the row by explicitly finding the next empty row
             next_row = len(self.sheet.get_all_values()) + 1
-            self.sheet.update(range_name=f"A{next_row}", values=[row])
+            self.sheet.update(range_name=f"A{next_row}", values=[row_data], value_input_option="USER_ENTERED")
             print(f"  [OK] Saved to Google Sheets at row {next_row}.")
         except Exception as e:
             print(f"  [ERROR] Failed to save to Google Sheets: {e}")
@@ -547,12 +674,9 @@ class EnquiryAgent:
                 human_delay(1500, 3000)
                 continue
 
-            # 2. Get Claude Message (Pass Property ID to Claude)
-            full_description = detail_info["description"]
-            if detail_info.get("property_id"):
-                full_description = f"Property ID: {detail_info['property_id']}\n\n" + full_description
-                
-            message = self.get_claude_enquiry_message(full_description)
+            # 2. Build enquiry message from template (no Claude call needed)
+            agent_name_raw = listing.get("agent", "") or detail_info.get("agent", "")
+            message = self.get_enquiry_message(agent_name_raw)
 
             # 3. Submit Form
             success = self.submit_enquiry(driver, message)

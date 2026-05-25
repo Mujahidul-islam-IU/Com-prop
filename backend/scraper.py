@@ -35,13 +35,15 @@ def slugify_location(location: str) -> str:
     s = re.sub(r'[\s-]+', '-', s).strip('-')
     return s
 
-def build_search_url(location_slug: str, keyword: str, min_size: int, listing_type: str, page_num: int) -> str:
+def build_search_url(location_slug: str, keyword: str, min_size: int, max_size: int, listing_type: str, page_num: int) -> str:
     path = f"/{listing_type}/{location_slug}/"
     params = {}
     if keyword:
         params["kw"] = keyword
-    if min_size > 0:
-        params["bs"] = f"{min_size},"
+    if min_size > 0 or max_size > 0:
+        min_str = str(min_size) if min_size > 0 else "0"
+        max_str = str(max_size) if max_size > 0 else ""
+        params["bs"] = f"{min_str},{max_str}"
     if page_num > 1:
         params["page"] = page_num
     
@@ -175,7 +177,7 @@ def extract_listings_from_page(driver) -> list[dict]:
                 item[k] = [clean_text(i) for i in v]
     return raw
 
-def navigate_via_search_ui(driver, location: str, keyword: str, min_size: int, listing_type: str) -> bool:
+def navigate_via_search_ui(driver, location: str, keyword: str, min_size: int, max_size: int, listing_type: str) -> bool:
     print(f"  [UI]  Using homepage search bar for: location='{location}', keyword='{keyword}'")
     try:
         location_input = WebDriverWait(driver, 10).until(
@@ -194,13 +196,23 @@ def navigate_via_search_ui(driver, location: str, keyword: str, min_size: int, l
         human_delay(2000, 3500)
         
         try:
-            # Press DOWN arrow to highlight the first suggestion, then ENTER to select it.
-            location_input.send_keys(Keys.ARROW_DOWN)
-            human_delay(300, 500)
-            location_input.send_keys(Keys.ENTER)
-            print(f"  [UI]  Successfully selected first autocomplete suggestion via keyboard.")
+            # Try to explicitly click the first suggestion in the dropdown
+            suggestions = driver.find_elements(By.CSS_SELECTOR, 'li[role="option"], div[role="option"], ul[class*="suggest"] li, [class*="Autocomplete"] li')
+            clicked = False
+            for suggestion in suggestions:
+                if suggestion.is_displayed():
+                    suggestion.click()
+                    clicked = True
+                    print("  [UI]  Successfully clicked the first autocomplete suggestion.")
+                    break
+            
+            # Fallback if dropdown elements aren't found by CSS
+            if not clicked:
+                print("  [UI]  No dropdown elements found, falling back to ENTER.")
+                location_input.send_keys(Keys.ENTER)
         except Exception as e:
-            print(f"  [WARN]  Failed keyboard autocomplete: {e}")
+            print(f"  [WARN]  Failed autocomplete selection: {e}")
+            location_input.send_keys(Keys.ENTER)
 
         human_delay(800, 1500)
 
@@ -251,7 +263,7 @@ def apply_filters_on_results_page(driver, keyword: str):
     except Exception as e:
         print(f"  [WARN]  Failed to apply filters via UI: {e}")
 
-def run_scraper(location: str, keyword: str, min_size: int, listing_type: str, max_pages: int, fetch_details: bool, output_dir: str, manual_warmup: bool = False) -> list[dict]:
+def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listing_type: str, max_pages: int, fetch_details: bool, output_dir: str, manual_warmup: bool = False) -> list[dict]:
     location_slug = slugify_location(location)
     all_listings = []
 
@@ -309,7 +321,7 @@ def run_scraper(location: str, keyword: str, min_size: int, listing_type: str, m
 
         # Step 1: UI Search on homepage to bypass Cloudflare
         print(f"\n  [PAGE 1]  Bypassing Cloudflare via basic UI search...")
-        navigate_via_search_ui(driver, location, "", min_size, listing_type)
+        navigate_via_search_ui(driver, location, "", min_size, max_size, listing_type)
         
         current_url = driver.current_url
         
@@ -323,7 +335,7 @@ def run_scraper(location: str, keyword: str, min_size: int, listing_type: str, m
         
         # Now that we have warmed up the session and CF clearance, we can just navigate directly
         # undetected_chromedriver bypasses the block that Playwright was hitting here.
-        first_page_url = build_search_url(location_slug, keyword, min_size, listing_type, 1)
+        first_page_url = build_search_url(location_slug, keyword, min_size, max_size, listing_type, 1)
         print(f"  [INFO]  Navigating directly to true query URL: {first_page_url}")
         driver.get(first_page_url)
         human_delay(2000, 4000)
@@ -340,7 +352,7 @@ def run_scraper(location: str, keyword: str, min_size: int, listing_type: str, m
 
         for page_num in range(1, max_pages + 1):
             if page_num > 1:
-                url = build_search_url(location_slug, keyword, min_size, listing_type, page_num)
+                url = build_search_url(location_slug, keyword, min_size, max_size, listing_type, page_num)
                 print(f"\n  [PAGE {page_num}/{max_pages}]  {url}")
                 try:
                     driver.get(url)
