@@ -374,6 +374,7 @@ def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listi
                 listing["page_num"] = page_num
                 listing["location_query"] = location
                 listing["scraped_at"] = datetime.now().isoformat()
+                listing["listing_type"] = listing_type
             
             all_listings.extend(listings)
             human_delay(2000, 5000)

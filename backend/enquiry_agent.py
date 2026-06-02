@@ -21,7 +21,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # Import configs
 from config import (
-    ANTHROPIC_API_KEY, GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEET_NAME,
+    ANTHROPIC_API_KEY, GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEET_KEY, GOOGLE_SHEET_HEADER_ROW,
     ENQUIRY_NAME, ENQUIRY_EMAIL, ENQUIRY_PHONE, ENQUIRY_MESSAGE_TEMPLATE,
     CLAUDE_PROMPT_CRITERIA,
 )
@@ -120,7 +120,7 @@ class EnquiryAgent:
             creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_CREDENTIALS_FILE, scope)
             client = gspread.authorize(creds)
             # Use the specific sheet ID provided by the user
-            self.sheet = client.open_by_key("1KfDrhJewwuX0zWzATj1a1zP-g2nWuzWTvkchCcqmiYw").sheet1
+            self.sheet = client.open_by_key(GOOGLE_SHEET_KEY).sheet1
             print("  [OK] Connected to Google Sheets.")
         except Exception as e:
             print(f"  [ERROR] Failed to connect to Google Sheets: {e}")
@@ -581,12 +581,12 @@ class EnquiryAgent:
             return
         
         try:
-            # Get headers to map data correctly
-            headers = self.sheet.row_values(1)
+            # Get headers to map data correctly from the configured header row (default row 2)
+            headers = self.sheet.row_values(GOOGLE_SHEET_HEADER_ROW)
             
             # If headers are empty, we can't reliably map, so we'll just append
             if not headers:
-                print("  [WARN] Sheet has no headers in row 1. Cannot map columns.")
+                print(f"  [WARN] Sheet has no headers in row {GOOGLE_SHEET_HEADER_ROW}. Cannot map columns.")
                 return
 
             tags_val = " | ".join(listing.get("tags", [])) if isinstance(listing.get("tags"), list) else listing.get("tags", "")
@@ -594,19 +594,33 @@ class EnquiryAgent:
             # Create an empty row of the same length as headers
             row_data = [""] * len(headers)
             
+            # Normalize: keep only lowercase a-z for robust matching
+            def _norm(s):
+                return re.sub(r"[^a-z]", "", str(s).lower())
+            
+            norm_headers = [_norm(h) for h in headers]
+            
             # Helper to safely set a value if the column exists
             def set_col(col_names, val):
                 for name in col_names:
-                    # Match case-insensitive
-                    idx = next((i for i, h in enumerate(headers) if h.lower().strip() == name.lower()), -1)
+                    norm_name = _norm(name)
+                    idx = next((i for i, nh in enumerate(norm_headers) if nh == norm_name), -1)
                     if idx != -1:
                         row_data[idx] = val
                         return
 
+            # Determine Property Type (sale or lease)
+            listing_type = (listing.get("listing_type") or "").lower()
+            prop_type_val = ""
+            if "sale" in listing_type or "sold" in listing_type:
+                prop_type_val = "sale"
+            elif "lease" in listing_type or "leased" in listing_type:
+                prop_type_val = "lease"
+
             set_col(["title", "Title"], listing.get("title", ""))
             set_col(["address", "Address"], listing.get("address", ""))
             set_col(["price", "Price", "Asking prize"], listing.get("price", ""))
-            set_col(["propertyType", "Property Type"], listing.get("propertyType", ""))
+            set_col(["Property Type"], prop_type_val)
             set_col(["size", "Size (sqm)"], listing.get("size", ""))
             set_col(["agent", "Agent"], listing.get("agent", ""))
             set_col(["agency", "Agency"], listing.get("agency", ""))
@@ -616,14 +630,36 @@ class EnquiryAgent:
             set_col(["page_num", "Page Num"], listing.get("page_num", ""))
             set_col(["location_query", "Location Query"], listing.get("location_query", ""))
             set_col(["message", "agent_message", "Message"], message)
-            set_col(["scraped_at", "Scraped At"], time.strftime("%Y-%m-%d %H:%M:%S"))
+            set_col(["scrapper at", "scraped_at", "Scraped At"], time.strftime("%Y-%m-%d %H:%M:%S"))
             set_col(["property_id", "PID"], detail_info.get("property_id", ""))
             
             # The new Purchase Price column requested by user
-            set_col(["Purchase Price", "Purchase price"], listing.get("price", ""))
+            raw_price = listing.get("price", "")
+            # Try to extract numbers from the price string
+            price_val = ""
+            if raw_price:
+                cleaned = re.sub(r"[^\d\.]", "", raw_price)
+                if cleaned:
+                    try:
+                        price_num = float(cleaned)
+                        price_val = f"${int(price_num):,}" if price_num % 1 == 0 else f"${price_num:,.2f}"
+                    except ValueError:
+                        price_val = ""
+            
+            set_col(["Purchase Price", "Purchase price"], price_val)
 
-            # Append the row by explicitly finding the next empty row
-            next_row = len(self.sheet.get_all_values()) + 1
+            # Append the row by explicitly finding the first row where Address (col 2 / index 1) is empty
+            all_vals = self.sheet.get_all_values()
+            next_row = len(all_vals) + 1
+            # Search from row 3 (after header) downwards
+            for r_idx in range(2, len(all_vals)):
+                row = all_vals[r_idx]
+                # Assuming Address is in column B (index 1) or at least check the whole row if it's empty
+                # A row is considered "empty" for our insertion if its first 3 columns are empty
+                if not any(str(v).strip() for v in row[:3]):
+                    next_row = r_idx + 1
+                    break
+                    
             self.sheet.update(range_name=f"A{next_row}", values=[row_data], value_input_option="USER_ENTERED")
             print(f"  [OK] Saved to Google Sheets at row {next_row}.")
         except Exception as e:

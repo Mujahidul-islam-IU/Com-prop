@@ -7,10 +7,10 @@ This guide details how to deploy the **LBKN CRE Automator** application on a Dig
 ## 1. DigitalOcean Droplet Selection
 
 *   **Region:** Sydney (`syd1`) — *Crucial for low latency and local Australian listing speeds.*
-*   **Operating System:** Ubuntu 22.04 LTS (x64)
+*   **Operating System:** Ubuntu 24.04 LTS (x64)
 *   **Size:** **Basic CPU - Shared Options** ➔ **Regular SSD** or **Premium Intel/AMD**
-    *   *Minimum Recommended:* **$12/month (2 GB RAM / 1 vCPU)**.
-    *   *Why?* Google Chrome requires significant RAM. A 1 GB Droplet will likely trigger out-of-memory crashes while running scraping processes.
+    *   *Minimum Recommended:* **$12/month (2 GB RAM / 2 vCPUs)**.
+    *   *Why?* Google Chrome requires significant RAM. A 1 GB Droplet will likely trigger out-of-memory crashes while running scraping processes. The client's droplet (2 vCPU, 2 GB RAM) is a great choice.
 
 ---
 
