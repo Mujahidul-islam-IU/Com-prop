@@ -280,22 +280,24 @@ def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listi
             except Exception:
                 pass
 
-    options = uc.ChromeOptions()
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--no-first-run")
-    options.add_argument("--no-service-autorun")
-    options.add_argument("--password-store=basic")
-
     print(f"  [INFO]  Starting undetected-chromedriver...")
     driver = None
     for attempt in range(1, 4):
+        options = uc.ChromeOptions()
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--no-first-run")
+        options.add_argument("--no-service-autorun")
+        options.add_argument("--password-store=basic")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        
         try:
             driver = uc.Chrome(
                 options=options,
                 user_data_dir=profile_dir,
                 use_subprocess=True,
-                version_main=148
+                version_main=133 # Auto-detecting version or keeping it flexible is better, but let's just remove version_main to auto-download the right driver for the installed Chrome
             )
             break
         except Exception as e:
