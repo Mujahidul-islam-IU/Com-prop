@@ -297,7 +297,7 @@ def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listi
                 options=options,
                 user_data_dir=profile_dir,
                 use_subprocess=True,
-                version_main=133 # Auto-detecting version or keeping it flexible is better, but let's just remove version_main to auto-download the right driver for the installed Chrome
+                version_main=148
             )
             break
         except Exception as e:
