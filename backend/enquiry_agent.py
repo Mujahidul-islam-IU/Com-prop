@@ -638,14 +638,34 @@ class EnquiryAgent:
             # Try to extract numbers from the price string
             price_val = ""
             if raw_price:
-                cleaned = re.sub(r"[^\d\.]", "", raw_price)
+                # Detect if price is expressed in millions (e.g. "$1.35 million", "$2.695 Million", "2.5M")
+                is_millions = bool(re.search(r'\b(million|millions|mil)\b', raw_price, re.IGNORECASE)) or \
+                              bool(re.search(r'\$[\d,\.]+\s*[Mm]\b(?!²|2|illion)', raw_price))
+                
+                # Pre-clean known non-price numbers (like square meters) to avoid false digits
+                cleaned = re.sub(r'm2|m²', '', raw_price, flags=re.IGNORECASE)
+                # Extract the numeric part
+                cleaned = re.sub(r"[^\d\.]", "", cleaned)
+                
                 if cleaned:
                     try:
+                        # Handle multiple dots, e.g. "1.35."
+                        cleaned = cleaned.rstrip('.')
+                        if cleaned.count('.') > 1:
+                            parts = cleaned.split('.')
+                            cleaned = parts[0] + '.' + ''.join(parts[1:])
+                            
                         price_num = float(cleaned)
-                        price_val = f"${int(price_num):,}" if price_num % 1 == 0 else f"${price_num:,.2f}"
+                        # Multiply by 1,000,000 if price was stated in millions
+                        if is_millions:
+                            price_num = price_num * 1_000_000
+                            
+                        # Ignore obviously bad parses (like just "2" from m2 if it slipped through)
+                        if price_num > 10:
+                            price_val = f"${int(price_num):,}" if price_num % 1 == 0 else f"${price_num:,.2f}"
                     except ValueError:
                         price_val = ""
-            
+                        
             set_col(["Purchase Price", "Purchase price"], price_val)
 
             # Append the row by explicitly finding the first row where Address (col 2 / index 1) is empty
