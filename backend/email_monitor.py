@@ -55,12 +55,22 @@ def _open_sheet():
     return gc.open_by_key(GOOGLE_SHEET_KEY).sheet1
 
 
-try:
-    sheet = _open_sheet()
-    print(f"[INFO] Google Sheet key '{GOOGLE_SHEET_KEY}' opened successfully.")
-except Exception as e:
-    print(f"[ERROR] Google Sheets init failed: {e}")
-    sheet = None
+sheet = None
+
+def get_sheet():
+    global sheet
+    if sheet is None:
+        try:
+            sheet = _open_sheet()
+            print(f"[INFO] Google Sheet key '{GOOGLE_SHEET_KEY}' opened successfully.")
+        except Exception as e:
+            print(f"[ERROR] Google Sheets init failed: {e}")
+            sheet = None
+    return sheet
+
+
+# Attempt initial connection on import, but don't fail permanently
+get_sheet()
 
 
 # -------------------------------------------------------
@@ -358,7 +368,7 @@ def update_google_sheet(email, intel, sender_email):
     correct columns based on per-sqm vs annual detection.
     Runs smart inference calculations using property size when available.
     """
-    if not sheet:
+    if not get_sheet():
         print("  [WARN] Google Sheet not available, skipping update.")
         return False
 
