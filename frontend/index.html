@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LBKN Property Automator</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 
 <body>
@@ -16,9 +16,37 @@
     </div>
 
     <div class="dashboard-container">
+        <!-- Auth guard: redirect to login if not authenticated -->
+        <script>
+            fetch('/api/auth/me').then(r => r.json()).then(data => {
+                if (!data.authenticated) window.location.href = '/login';
+                else {
+                    const el = document.getElementById('user-email-display');
+                    if (el) el.textContent = data.email || '';
+                    if (data.email === 'admin@lbkncapital.com') {
+                        document.getElementById('admin-panel').classList.remove('hidden');
+                        if (typeof loadAdminUsers === 'function') loadAdminUsers();
+                    }
+                }
+            }).catch(() => window.location.href = '/login');
+        </script>
+
         <header>
-            <h1>LBKN Automator</h1>
-            <p>End-to-end commercial property sourcing, enquiry & reply tracking.</p>
+            <div class="header-left">
+                <h1>LBKN Automator</h1>
+                <p>End-to-end commercial property sourcing, enquiry & reply tracking.</p>
+            </div>
+            <div class="user-info">
+                <span class="user-email" id="user-email-display"></span>
+                <button type="button" class="logout-btn" id="logout-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Logout
+                </button>
+            </div>
         </header>
 
         <main>
@@ -85,6 +113,11 @@
                     <div id="progress-bar" class="progress-bar"></div>
                 </div>
                 <p id="status-text">Ready to start.</p>
+                <div id="progress-details" class="hidden" style="margin-top: 15px; font-size: 0.95em; color: var(--text-secondary); line-height: 1.6; background: rgba(0,0,0,0.1); padding: 12px; border-radius: 8px;">
+                    <div id="progress-count" style="font-weight: 600; color: #60A5FA; margin-bottom: 4px;"></div>
+                    <div id="progress-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+                    <div id="progress-time" style="font-weight: 500; margin-top: 4px;"></div>
+                </div>
             </div>
 
             <!-- Scraper Results -->
@@ -106,6 +139,39 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- ============ ENQUIRY SETTINGS ============ -->
+            <div class="glass-panel" id="enquiry-settings-section">
+                <div class="status-header">
+                    <h2 class="section-title">Enquiry Settings</h2>
+                </div>
+                <p class="section-desc">Configure the details that will be automatically submitted when enquiring about a property.</p>
+                <form id="enquiry-settings-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enquiry_name">Name *</label>
+                            <input type="text" id="enquiry_name" name="enquiry_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="enquiry_phone">Phone *</label>
+                            <input type="text" id="enquiry_phone" name="enquiry_phone" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="enquiry_email">Email *</label>
+                        <input type="email" id="enquiry_email" name="enquiry_email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="enquiry_template">Message Template *</label>
+                        <textarea id="enquiry_template" name="enquiry_template" rows="8" required style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;"></textarea>
+                        <p style="font-size: 0.8rem; color: #a1a1aa; margin-top: 0.5rem;">Use <code>{agent_name}</code> as a placeholder for the agent's name.</p>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-top: 1rem;">
+                        <button type="submit" id="save-enquiry-settings-btn">Save Settings</button>
+                        <span id="enquiry-settings-status" style="margin-left: 1rem; font-size: 0.9rem; font-weight: 500;"></span>
+                    </div>
+                </form>
             </div>
 
             <!-- ============ PHASE 3: EMAIL REPLY MONITOR ============ -->
@@ -145,6 +211,30 @@
                             <tbody id="email-preview-body"></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- ============ ADMIN PANEL (Hidden by Default) ============ -->
+            <div id="admin-panel" class="glass-panel hidden" style="margin-top: 2rem;">
+                <div class="status-header">
+                    <h2 class="section-title">Admin: User Management</h2>
+                    <span class="badge completed">Admin Only</span>
+                </div>
+                <p class="section-desc">Approve or delete user accounts. Users cannot log in until approved.</p>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-body">
+                            <!-- Admin users populated dynamically -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

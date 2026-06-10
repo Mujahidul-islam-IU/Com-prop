@@ -263,7 +263,7 @@ def apply_filters_on_results_page(driver, keyword: str):
     except Exception as e:
         print(f"  [WARN]  Failed to apply filters via UI: {e}")
 
-def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listing_type: str, max_pages: int, fetch_details: bool, output_dir: str, manual_warmup: bool = False) -> list[dict]:
+def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listing_type: str, max_pages: int, fetch_details: bool, output_dir: str, manual_warmup: bool = False, progress_callback=None) -> list[dict]:
     location_slug = slugify_location(location)
     all_listings = []
 
@@ -413,7 +413,7 @@ def run_scraper(location: str, keyword: str, min_size: int, max_size: int, listi
                 else:
                     agent = EnquiryAgent()
                     # Processing all listings end-to-end
-                    agent.process_listings(driver, all_listings)
+                    agent.process_listings(driver, all_listings, progress_callback=progress_callback)
                     
                     # Re-save the enriched data to CSV/JSON after details extraction
                     print(f"\n  [SAVE]  Re-saving {len(all_listings)} enriched listings...")

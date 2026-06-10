@@ -53,3 +53,5 @@ page.html
 
 # === ARCHIVE ===
 _archive/
+*.db
+deploy_update.py

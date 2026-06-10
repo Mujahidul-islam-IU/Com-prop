@@ -22,9 +22,9 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 # Import configs
 from config import (
     ANTHROPIC_API_KEY, GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEET_KEY, GOOGLE_SHEET_HEADER_ROW,
-    ENQUIRY_NAME, ENQUIRY_EMAIL, ENQUIRY_PHONE, ENQUIRY_MESSAGE_TEMPLATE,
     CLAUDE_PROMPT_CRITERIA,
 )
+from enquiry_settings_manager import get_enquiry_settings
 
 def human_delay(min_ms: int = 800, max_ms: int = 2500):
     """Random pause in a human-plausible range."""
@@ -146,7 +146,8 @@ class EnquiryAgent:
                 # Take first name only
                 agent_first = first_agent.split()[0].strip()
 
-        message = ENQUIRY_MESSAGE_TEMPLATE.format(agent_name=agent_first)
+        settings = get_enquiry_settings()
+        message = settings["template"].format(agent_name=agent_first)
         print(f"  [MSG] Using template message (agent: {agent_first})")
         return message
 
@@ -508,23 +509,26 @@ class EnquiryAgent:
             email_input = driver.find_element(By.CSS_SELECTOR, 'input[name="email"], input[name*="Email"], input[type="email"]')
             msg_input   = driver.find_element(By.CSS_SELECTOR, 'textarea[name="message"], textarea[name*="Message"]')
 
+            # --- Load settings ---
+            settings = get_enquiry_settings()
+
             # --- Fill Name ---
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", name_input)
             human_delay(200, 400)
             human_mouse_move_to(driver, name_input)
-            self._fill_field_reliably(driver, name_input, ENQUIRY_NAME,
+            self._fill_field_reliably(driver, name_input, settings["name"],
                                        "Name", is_textarea=False, wpm_range=(40, 65))
             human_delay(400, 900)
 
             # --- Fill Phone ---
             human_mouse_move_to(driver, phone_input)
-            self._fill_field_reliably(driver, phone_input, ENQUIRY_PHONE,
+            self._fill_field_reliably(driver, phone_input, settings["phone"],
                                        "Phone", is_textarea=False, wpm_range=(45, 70))
             human_delay(500, 1100)
 
             # --- Fill Email ---
             human_mouse_move_to(driver, email_input)
-            self._fill_field_reliably(driver, email_input, ENQUIRY_EMAIL,
+            self._fill_field_reliably(driver, email_input, settings["email"],
                                        "Email", is_textarea=False, wpm_range=(30, 55))
             human_delay(400, 900)
 
@@ -539,9 +543,9 @@ class EnquiryAgent:
             #  FINAL VALIDATION GATE — do NOT submit unless ALL fields OK
             # ============================================================
             fields_to_check = {
-                "Name":    (name_input,  ENQUIRY_NAME,  False),
-                "Phone":   (phone_input, ENQUIRY_PHONE, False),
-                "Email":   (email_input, ENQUIRY_EMAIL, False),
+                "Name":    (name_input,  settings["name"],  False),
+                "Phone":   (phone_input, settings["phone"], False),
+                "Email":   (email_input, settings["email"], False),
                 "Message": (msg_input,   message,       True),
             }
             if not self._verify_all_fields_before_submit(driver, fields_to_check):
@@ -635,36 +639,40 @@ class EnquiryAgent:
             
             # The new Purchase Price column requested by user
             raw_price = listing.get("price", "")
-            # Try to extract numbers from the price string
             price_val = ""
             if raw_price:
-                # Detect if price is expressed in millions (e.g. "$1.35 million", "$2.695 Million", "2.5M")
-                is_millions = bool(re.search(r'\b(million|millions|mil)\b', raw_price, re.IGNORECASE)) or \
-                              bool(re.search(r'\$[\d,\.]+\s*[Mm]\b(?!²|2|illion)', raw_price))
-                
-                # Pre-clean known non-price numbers (like square meters) to avoid false digits
-                cleaned = re.sub(r'm2|m²', '', raw_price, flags=re.IGNORECASE)
-                # Extract the numeric part
-                cleaned = re.sub(r"[^\d\.]", "", cleaned)
-                
-                if cleaned:
-                    try:
-                        # Handle multiple dots, e.g. "1.35."
-                        cleaned = cleaned.rstrip('.')
-                        if cleaned.count('.') > 1:
-                            parts = cleaned.split('.')
-                            cleaned = parts[0] + '.' + ''.join(parts[1:])
+                pattern = r'(?i)(?:\$\s*[\d,\.]+\s*(?:million|millions|mil|m)?\b)|(?:[\d,\.]+\s*(?:million|millions|mil|m)\b)|(?:\b\d{1,3}(?:,\d{3})+\b)'
+                matches = re.findall(pattern, raw_price)
+                if matches:
+                    parsed_prices = []
+                    for match in matches:
+                        match = match.strip()
+                        is_millions = bool(re.search(r'(?i)million|millions|mil|m\b', match))
+                        clean_num = re.sub(r'[^\d\.]', '', match)
+                        
+                        if clean_num.count('.') > 1:
+                            clean_num = clean_num.rstrip('.')
+                            if clean_num.count('.') > 1:
+                                parts = clean_num.split('.')
+                                clean_num = parts[0] + '.' + ''.join(parts[1:])
+                                
+                        if not clean_num:
+                            continue
                             
-                        price_num = float(cleaned)
-                        # Multiply by 1,000,000 if price was stated in millions
-                        if is_millions:
-                            price_num = price_num * 1_000_000
+                        try:
+                            val = float(clean_num)
+                            if is_millions and val < 1000:
+                                val = val * 1_000_000
+                                
+                            if val > 10:
+                                formatted = f"${int(val):,}" if val % 1 == 0 else f"${val:,.2f}"
+                                if formatted not in parsed_prices:
+                                    parsed_prices.append(formatted)
+                        except ValueError:
+                            pass
                             
-                        # Ignore obviously bad parses (like just "2" from m2 if it slipped through)
-                        if price_num > 10:
-                            price_val = f"${int(price_num):,}" if price_num % 1 == 0 else f"${price_num:,.2f}"
-                    except ValueError:
-                        price_val = ""
+                    if parsed_prices:
+                        price_val = " - ".join(parsed_prices)
                         
             set_col(["Purchase Price", "Purchase price"], price_val)
 
@@ -685,7 +693,7 @@ class EnquiryAgent:
         except Exception as e:
             print(f"  [ERROR] Failed to save to Google Sheets: {e}")
 
-    def process_listings(self, driver, listings: list[dict]):
+    def process_listings(self, driver, listings: list[dict], progress_callback=None):
         """Main orchestrator for processing a list of scraped properties.
 
         Human-behaviour enhancements:
@@ -712,6 +720,10 @@ class EnquiryAgent:
                 continue
 
             print(f"\n[{idx+1}/{len(shuffled)}] Processing: {listing.get('title')}")
+            
+            if progress_callback:
+                est_mins = (len(shuffled) - idx) * 3
+                progress_callback(idx + 1, len(shuffled), listing.get("title", ""), est_mins)
 
             if self.is_already_enquired(url):
                 print("  [SKIP] Already enquired (found in Google Sheets).")

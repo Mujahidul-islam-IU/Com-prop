@@ -302,4 +302,296 @@ a:hover {
     header h1 {
         font-size: 1.75rem;
     }
+    .auth-card {
+        margin: 0 1rem;
+        padding: 2rem 1.5rem;
+    }
+}
+
+/* ============================================================
+   Authentication Pages — Styles
+   ============================================================ */
+
+.auth-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    width: 100%;
+    padding: 2rem;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 440px;
+    padding: 2.5rem;
+    animation: authFadeIn 0.5s ease-out;
+}
+
+@keyframes authFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-brand {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(to right, #60A5FA, #A78BFA);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+.auth-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.auth-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.auth-form .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.auth-form .form-group:last-of-type {
+    margin-bottom: 0.5rem;
+}
+
+/* Password toggle */
+.password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-wrapper input {
+    width: 100%;
+    padding-right: 3rem;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    width: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.password-toggle:hover {
+    color: var(--text-primary);
+    background: none;
+    transform: none;
+}
+
+/* Forgot password link */
+.auth-forgot {
+    text-align: right;
+    margin-bottom: 1.5rem;
+    margin-top: 0.25rem;
+}
+
+.auth-forgot a {
+    font-size: 0.825rem;
+    color: var(--text-secondary);
+    transition: color 0.2s;
+}
+
+.auth-forgot a:hover {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+/* Submit button */
+.auth-submit-btn {
+    width: 100%;
+    padding: 0.875rem;
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #3B82F6, #6366F1);
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.auth-submit-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.5s;
+}
+
+.auth-submit-btn:hover::before {
+    left: 100%;
+}
+
+.auth-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+}
+
+.auth-submit-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.auth-submit-btn .spinner {
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+/* Auth message (error / success) */
+.auth-message {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.5;
+    text-align: center;
+    animation: authFadeIn 0.3s ease-out;
+}
+
+.auth-message.error {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #F87171;
+}
+
+.auth-message.success {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34D399;
+}
+
+/* Auth footer links */
+.auth-footer {
+    text-align: center;
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.auth-footer p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.auth-footer a {
+    color: #60A5FA;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.auth-footer a:hover {
+    color: #93C5FD;
+    text-decoration: none;
+}
+
+/* Powered-by text */
+.auth-powered {
+    text-align: center;
+    margin-top: 2rem;
+    color: rgba(156, 163, 175, 0.5);
+    font-size: 0.8rem;
+}
+
+/* ============================================================
+   Dashboard Header — Logout Button
+   ============================================================ */
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.header-left {
+    flex: 1;
+}
+
+.logout-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: auto;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.logout-btn:hover {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #F87171;
+    transform: none;
+}
+
+.logout-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+}
+
+.user-email {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

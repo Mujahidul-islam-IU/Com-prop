@@ -57,3 +57,8 @@ POLL_INTERVAL_MINS  = 15
 #   ~/.cre_scraper_profile_uc
 # On first run, Cloudflare may show a challenge. The browser will open
 # visibly — just wait (it usually auto-solves within ~10 seconds).
+
+# --- Authentication ---
+AUTH_SECRET_KEY = "change-this-to-a-random-secret-key"  # JWT signing key
+AUTH_TOKEN_EXPIRY_DAYS = 7
+AUTH_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")

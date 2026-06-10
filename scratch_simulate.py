@@ -1,37 +1,66 @@
-"""
-Simulate the exact email from the screenshot to verify end-to-end logic
-without touching real mailbox state.
-"""
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"))
+import re
 
-from backend.email_monitor import extract_intel_with_claude, update_google_sheet, _open_sheet
+def better_parse_price(raw_price):
+    if not raw_price:
+        return ""
+        
+    pattern = r'(?i)(?:\$\s*[\d,\.]+\s*(?:million|millions|mil|m)?\b)|(?:[\d,\.]+\s*(?:million|millions|mil|m)\b)|(?:\b\d{1,3}(?:,\d{3})+\b)'
+    matches = re.findall(pattern, raw_price)
+    
+    if not matches:
+        return ""
+        
+    parsed_prices = []
+    
+    for match in matches:
+        match = match.strip()
+        is_millions = bool(re.search(r'(?i)million|millions|mil|m\b', match))
+        
+        clean_num = re.sub(r'[^\d\.]', '', match)
+        
+        if clean_num.count('.') > 1:
+            clean_num = clean_num.rstrip('.')
+            if clean_num.count('.') > 1:
+                parts = clean_num.split('.')
+                clean_num = parts[0] + '.' + ''.join(parts[1:])
+                
+        if not clean_num:
+            continue
+            
+        try:
+            val = float(clean_num)
+            if is_millions and val < 1000:
+                val = val * 1_000_000
+                
+            if val > 10:
+                formatted = f"${int(val):,}" if val % 1 == 0 else f"${val:,.2f}"
+                if formatted not in parsed_prices:
+                    parsed_prices.append(formatted)
+        except ValueError:
+            pass
+            
+    if parsed_prices:
+        if len(parsed_prices) == 1:
+            return parsed_prices[0]
+        else:
+            return " - ".join(parsed_prices)
+            
+    return ""
 
-# ─── Simulate the demo email from the screenshot ─────────────────────────────
-fake_email = {
-    "id": "SIMULATED-DONT-MARK",
-    "subject": "RE: T1C-R01 / 3 Grazier Lane, Belconnen",
-    "bodyPreview": "Hi Valentina, the expected net rental for 3 Grazier Lane is $67,500 per annum, and total outgoings are $10,231.39 p.a. Thanks, Ray White.",
-    "receivedDateTime": "2026-05-21T09:30:00Z",
-    "sender": {
-        "emailAddress": {
-            "address": "agent@raywhite.com",
-            "name": "Ray White Agent"
-        }
-    }
-}
+tests = [
+    "From $751,200 to $840,000 + GST",
+    "$2,950,000 - $3,300,000 plus GST (under offer)",
+    "For Sale, Offers over $1.35 million",
+    "For Sale, Offers over $2.695 Million",
+    "$2.5M",
+    "$29,500,003.30",
+    "$1,350,000",
+    "$825,000",
+    "Contact Agent",
+    "210 m2",
+    "26 30 31 32 59 60 something $575,000",
+    "Offers over 1.5 million"
+]
 
-subject      = fake_email["subject"]
-body         = fake_email["bodyPreview"]
-sender_email = fake_email["sender"]["emailAddress"]["address"]
-
-print(f"Simulating email: '{subject}' from {sender_email}\n")
-
-intel = extract_intel_with_claude(subject, body, sender_email)
-print(f"Claude result: {intel}\n")
-
-if intel and intel.get("is_property_email"):
-    success = update_google_sheet(fake_email, intel, sender_email)
-    print(f"\nSheet updated: {success}")
-else:
-    print("Claude says this is not a property email (unexpected).")
+for t in tests:
+    print(f"{t:50} -> {better_parse_price(t)}")

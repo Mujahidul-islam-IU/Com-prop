@@ -8,3 +8,5 @@ oauth2client
 anthropic
 requests
 msal
+bcrypt
+PyJWT
