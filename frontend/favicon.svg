@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="6" fill="#0f1729"/>
+  <!-- Building shape -->
+  <rect x="5" y="12" width="10" height="15" rx="1" fill="#3B82F6"/>
+  <rect x="17" y="7" width="10" height="20" rx="1" fill="#60A5FA"/>
+  <!-- Windows on tall building -->
+  <rect x="19" y="10" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.7"/>
+  <rect x="23" y="10" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.7"/>
+  <rect x="19" y="15" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.7"/>
+  <rect x="23" y="15" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.7"/>
+  <rect x="19" y="20" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.7"/>
+  <rect x="23" y="20" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.7"/>
+  <!-- Windows on short building -->
+  <rect x="7" y="15" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.6"/>
+  <rect x="11" y="15" width="2.5" height="2.5" rx="0.3" fill="#0f1729" opacity="0.6"/>
+  <!-- Automation spark/arrow at top -->
+  <polygon points="20,3 23,7 17,7" fill="#FBBF24"/>
+</svg>

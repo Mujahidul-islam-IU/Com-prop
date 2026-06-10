@@ -301,6 +301,10 @@ def serve_forgot_password():
 def serve_reset_password():
     return FileResponse("frontend/reset_password.html")
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse("frontend/favicon.svg", media_type="image/svg+xml")
+
 # --- Dashboard (protected) ---
 
 @app.get("/")
