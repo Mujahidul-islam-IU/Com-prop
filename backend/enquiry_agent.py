@@ -3,6 +3,7 @@ import json
 import time
 import random
 import re
+from datetime import datetime
 from typing import Dict, Optional
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -471,6 +472,25 @@ class EnquiryAgent:
             return False
         return True
 
+    def _take_screenshot(self, driver, label: str) -> str:
+        """Save a screenshot to a dedicated evidence folder and return the path."""
+        try:
+            # Save all screenshots to a single timestamped session folder
+            if not hasattr(self, '_screenshot_dir'):
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                base = os.path.join(os.path.expanduser("~"), "enquiry_screenshots", ts)
+                os.makedirs(base, exist_ok=True)
+                self._screenshot_dir = base
+
+            safe_label = re.sub(r'[^\w\-]', '_', label)[:60]
+            path = os.path.join(self._screenshot_dir, f"{safe_label}.png")
+            driver.save_screenshot(path)
+            print(f"  [SCREENSHOT] Saved: {path}")
+            return path
+        except Exception as e:
+            print(f"  [SCREENSHOT] Failed to save screenshot '{label}': {e}")
+            return ""
+
     def submit_enquiry(self, driver, message: str) -> bool:
         """Finds the enquiry form on the detail page and submits it.
 
@@ -480,6 +500,7 @@ class EnquiryAgent:
           3. Force-correct any mismatches via React-aware JS injection
           4. Run a final validation gate on ALL fields before clicking Submit
           5. Only click Submit if every field is confirmed correct
+          6. Take screenshots before fill, after fill, and after submit for evidence
         """
         print("  [FORM] Locating enquiry form...")
         try:
@@ -511,6 +532,10 @@ class EnquiryAgent:
 
             # --- Load settings ---
             settings = get_enquiry_settings()
+
+            # ── SCREENSHOT 1: Form is visible but not yet filled ──────────────
+            url_slug = re.sub(r'[^\w]', '_', driver.current_url.split('/')[-2])[:40]
+            self._take_screenshot(driver, f"{url_slug}__1_form_blank")
 
             # --- Fill Name ---
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", name_input)
@@ -549,8 +574,15 @@ class EnquiryAgent:
                 "Message": (msg_input,   message,       True),
             }
             if not self._verify_all_fields_before_submit(driver, fields_to_check):
+                # ── SCREENSHOT on gate failure ────────────────────────────────
+                self._take_screenshot(driver, f"{url_slug}__GATE_FAILED")
                 print("  [ERROR] Form fields could not be verified. SKIPPING submit to avoid empty enquiry.")
                 return False
+
+            # ── SCREENSHOT 2: Form fully filled, just before clicking Send ────
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", msg_input)
+            human_delay(200, 400)
+            self._take_screenshot(driver, f"{url_slug}__2_form_filled")
 
             # --- Locate submit button and click ---
             submit_btn = driver.find_element(By.XPATH, '//button[@type="submit" or contains(translate(text(), "SEND", "send"), "send")]')
@@ -558,11 +590,45 @@ class EnquiryAgent:
             human_delay(300, 600)
             human_mouse_move_to(driver, submit_btn)
             human_delay(300, 700)
-            driver.execute_script("arguments[0].click();", submit_btn)
-            print("  [FORM] ✓ Form filled and submitted successfully!")
+            try:
+                # Use native click first to generate a trusted MouseEvent
+                submit_btn.click()
+            except Exception:
+                # Fallback to ActionChains if obscured
+                from selenium.webdriver.common.action_chains import ActionChains
+                ActionChains(driver).click(submit_btn).perform()
+            print("  [FORM] Send button clicked. Waiting for confirmation...")
+
+            # ── Wait for post-submit confirmation UI (3-8 seconds) ────────────
+            confirmed = False
+            try:
+                WebDriverWait(driver, 8).until(
+                    EC.any_of(
+                        EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Enquiry sent") or contains(text(), "enquiry has been sent") or contains(text(), "message has been sent") or contains(text(), "thank you")]')),
+                        EC.presence_of_element_located((By.CSS_SELECTOR, '[class*="success"], [class*="Success"], [class*="confirmation"], [class*="Confirmation"]'))
+                    )
+                )
+                confirmed = True
+                print("  [FORM] ✓ CONFIRMED: Website displayed submission success message.")
+            except TimeoutException:
+                print("  [FORM] [WARN] Could not detect on-page confirmation message after 8s.")
+
+            # ── SCREENSHOT 3: After clicking Send (success or unknown) ─────────
+            human_delay(1500, 2500)
+            self._take_screenshot(driver, f"{url_slug}__3_after_submit{'_CONFIRMED' if confirmed else '_UNKNOWN'}")
+
+            if confirmed:
+                print("  [FORM] ✓ Form filled and submitted successfully!")
+            else:
+                print("  [FORM] ✓ Form submitted (no on-page confirmation detected — check screenshots).")
             return True
 
         except Exception as e:
+            try:
+                url_slug = re.sub(r'[^\w]', '_', driver.current_url.split('/')[-2])[:40]
+                self._take_screenshot(driver, f"{url_slug}__ERROR")
+            except Exception:
+                pass
             print(f"  [ERROR] Failed to submit enquiry form: {e}")
             return False
 
